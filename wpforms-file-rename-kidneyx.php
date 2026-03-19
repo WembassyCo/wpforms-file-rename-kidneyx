@@ -1,22 +1,24 @@
 <?php
 /**
- * Plugin Name: WPForms File Rename - Minimal
- * Description: Minimal working version for WPForms
- * Version: 1.0.0-minimal
+ * Plugin Name: WPForms File Rename - KidneyX
+ * Description: Renames uploaded files and updates the entry
+ * Version: 1.0.4
  * Author: Wembassy
  */
 
 if (!defined('ABSPATH')) exit;
 
-add_action('wpforms_process_complete', 'wembassy_minimal_complete', 10, 4);
+add_action('wpforms_process_complete', 'wembassy_kidneyx_rename', 10, 4);
 
-function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
+function wembassy_kidneyx_rename($fields, $entry, $form_data, $entry_id) {
+    if (empty($entry_id)) return;
+    
     // Store messages
     $output = array();
-    $output[] = '=== START ===';
+    $output[] = '=== FILE RENAME START ===';
     $output[] = 'Entry: ' . $entry_id;
     
-    // Get team
+    // Get team name
     $team = current_time('Y-m-d_H-i-s');
     if (isset($fields['2']) && isset($fields['2']['value'])) {
         $val = $fields['2']['value'];
@@ -26,7 +28,7 @@ function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
     }
     $output[] = 'Team: ' . $team;
     
-    // Get abbrev
+    // Get abbreviation
     $form_title = isset($form_data['settings']['form_title']) ? $form_data['settings']['form_title'] : 'Form';
     $title = preg_replace('/[^a-zA-Z0-9\s]/', '', $form_title);
     $words = explode(' ', $title);
@@ -38,24 +40,18 @@ function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
         }
     }
     $abbrev = substr($abbrev, 0, 5);
-    if (empty($abbrev)) {
-        $abbrev = 'FORM';
-    }
-    $output[] = 'Abbrev: ' . $abbrev;
+    if (empty($abbrev)) $abbrev = 'FORM';
     
     $team = sanitize_file_name($team);
     $abbrev = sanitize_file_name($abbrev);
-    
-    // Get upload dir
     $upload_dir = wp_upload_dir();
-    $output[] = 'Upload path: ' . $upload_dir['path'];
-    $output[] = 'Upload URL: ' . $upload_dir['url'];
     
-    // Process fields
-    $found_files = 0;
-    $renamed_files = 0;
+    $output[] = 'Upload dir: ' . $upload_dir['basedir'];
     
-    foreach ($fields as $field_id => $field) {
+    // Track updated fields
+    $updated_fields = array();
+    
+    foreach ($fields as $field_id => &$field) {
         if (!isset($field['type']) || $field['type'] !== 'file-upload') {
             continue;
         }
@@ -63,45 +59,28 @@ function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
             continue;
         }
         
-        $found_files++;
-        $output[] = '';
-        $output[] = 'Field ' . $field_id;
-        $output[] = 'Value: ' . print_r($field['value'], true);
-        
         $file_url = $field['value'];
         if (is_array($file_url)) {
             $file_url = $file_url[0];
         }
-        
-        if (empty($file_url)) {
-            continue;
-        }
+        if (empty($file_url)) continue;
         
         $filename = basename($file_url);
-        $output[] = 'Filename: ' . $filename;
+        $output[] = '';
+        $output[] = 'Field ' . $field_id . ' file: ' . $filename;
         
-        // Try to find file
+        // Find file
         $file_path = false;
-        
-        // Parse year/month from URL
         $url_path = parse_url($file_url, PHP_URL_PATH);
-        if ($url_path) {
-            // Try to get year/month from URL
-            if (preg_match('/uploads\/([0-9]{4})\/([0-9]{2})\//', $url_path, $matches)) {
-                $ym = $matches[1] . '/' . $matches[2];
-                $test = $upload_dir['basedir'] . '/' . $ym . '/' . $filename;
-                if (file_exists($test)) {
-                    $file_path = $test;
-                }
-            }
+        if ($url_path && preg_match('/uploads\/([0-9]{4})\/([0-9]{2})\//', $url_path, $matches)) {
+            $test = $upload_dir['basedir'] . '/' . $matches[1] . '/' . $matches[2] . '/' . $filename;
+            if (file_exists($test)) $file_path = $test;
         }
         
-        // Try other locations
         if (!$file_path) {
             $tests = array(
                 $upload_dir['path'] . '/' . $filename,
                 $upload_dir['basedir'] . '/' . $filename,
-                $upload_dir['basedir'] . '/2026/03/' . $filename,
             );
             foreach ($tests as $test) {
                 if (file_exists($test)) {
@@ -112,20 +91,14 @@ function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
         }
         
         if (!$file_path) {
-            $output[] = 'File NOT FOUND';
+            $output[] = 'ERROR: File not found!';
             continue;
         }
         
-        $output[] = 'Found: ' . $file_path;
+        $output[] = 'Found at: ' . $file_path;
         
-        // Get extension
-        $ext = pathinfo($file_path, PATHINFO_EXTENSION);
-        if (empty($ext)) {
-            $ext = 'pdf';
-        }
-        $output[] = 'Extension: ' . $ext;
-        
-        // New name
+        // Rename
+        $ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION)) ?: 'pdf';
         $new_name = $team . '_' . $abbrev . '_KidneyXEmpower_Submission.' . $ext;
         $new_path = dirname($file_path) . '/' . $new_name;
         
@@ -136,58 +109,85 @@ function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
             $counter++;
         }
         
-        $output[] = 'Rename to: ' . $new_name;
+        $output[] = 'Renaming to: ' . $new_name;
         
-        // Rename
         if (rename($file_path, $new_path)) {
-            $output[] = 'SUCCESS';
-            $renamed_files++;
-            
-            // Get new URL
             $dir = dirname($file_path);
             $url_base = str_replace($upload_dir['basedir'], $upload_dir['baseurl'], $dir);
             $new_url = $url_base . '/' . $new_name;
-            $output[] = 'New URL: ' . $new_url;
+            $output[] = 'SUCCESS: ' . $new_url;
             
-            // Update entry via global (hacky but may work)
-            global $wpdb;
-            if (isset($wpdb) && $entry_id) {
-                $table = $wpdb->prefix . 'wpforms_entries';
-                $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE entry_id = %d", $entry_id));
-                if ($row && $row->fields) {
-                    $entry_fields = json_decode($row->fields, true);
-                    if ($entry_fields && isset($entry_fields[$field_id])) {
-                        $entry_fields[$field_id]['value'] = $new_url;
-                        $wpdb->update($table, array('fields' => json_encode($entry_fields)), array('entry_id' => $entry_id));
-                        $output[] = 'DB updated';
-                    }
-                }
+            // Store for update
+            $updated_fields[$field_id] = $new_url;
+            
+            // Clean up old file
+            if (file_exists($file_path)) {
+                unlink($file_path);
             }
         } else {
-            $error = error_get_last();
-            $output[] = 'FAILED: ' . ($error ? $error['message'] : 'unknown');
+            $output[] = 'FAILED rename';
         }
     }
     
-    $output[] = '';
-    $output[] = '=== END ===';
-    $output[] = 'Files found: ' . $found_files;
-    $output[] = 'Files renamed: ' . $renamed_files;
+    // Update entry in database
+    if (!empty($updated_fields)) {
+        $output[] = '';
+        $output[] = 'Updating entry...';
+        
+        global $wpdb;
+        $table = $wpdb->prefix . 'wpforms_entries';
+        
+        // Get current entry fields
+        $row = $wpdb->get_row($wpdb->prepare("SELECT fields FROM $table WHERE entry_id = %d", $entry_id), ARRAY_A);
+        
+        if ($row && !empty($row['fields'])) {
+            $entry_fields = json_decode($row['fields'], true);
+            
+            if (is_array($entry_fields)) {
+                foreach ($updated_fields as $fid => $url) {
+                    if (isset($entry_fields[$fid])) {
+                        $entry_fields[$fid]['value'] = $url;
+                        $entry_fields[$fid]['file'] = $url;
+                        $entry_fields[$fid]['file_original'] = basename($url);
+                        $output[] = "Updated field $fid to: $url";
+                    }
+                }
+                
+                // Update the database
+                $result = $wpdb->update(
+                    $table,
+                    array('fields' => wp_json_encode($entry_fields)),
+                    array('entry_id' => $entry_id),
+                    array('%s'),
+                    array('%d')
+                );
+                
+                if ($result !== false) {
+                    $output[] = "Entry updated: $entry_id";
+                } else {
+                    $output[] = "Entry update failed";
+                }
+            }
+        } else {
+            $output[] = "Could not retrieve entry fields";
+        }
+    }
     
-    // Store for display
-    set_transient('wembassy_minimal_' . get_current_user_id(), $output, 60);
+    $output[] = '=== END ===';
+    
+    set_transient('wembassy_kidneyx_' . get_current_user_id(), $output, 60);
 }
 
-// Show on confirmation
-add_filter('wpforms_frontend_confirmation_message', 'wembassy_minimal_show', 10, 4);
+// Show debug on confirmation
+add_filter('wpforms_frontend_confirmation_message', 'wembassy_kidneyx_display', 10, 4);
 
-function wembassy_minimal_show($message, $form_data, $fields, $entry_id) {
-    $data = get_transient('wembassy_minimal_' . get_current_user_id());
+function wembassy_kidneyx_display($message, $form_data, $fields, $entry_id) {
+    $data = get_transient('wembassy_kidneyx_' . get_current_user_id());
     if ($data) {
-        $html = '<div style="background:#f0f0f0;border:2px solid #0073aa;padding:10px;margin:10px 0;font-family:monospace;font-size:11px;white-space:pre-wrap;">';
+        $html = '<div style="background:#f0f0f0;border:2px solid #0073aa;padding:15px;margin:20px 0;font-family:monospace;font-size:11px;white-space:pre-wrap;">';
         $html .= implode('\n', $data);
         $html .= '</div>';
-        delete_transient('wembassy_minimal_' . get_current_user_id());
+        delete_transient('wembassy_kidneyx_' . get_current_user_id());
         return $message . $html;
     }
     return $message;
