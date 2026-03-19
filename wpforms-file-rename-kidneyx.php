@@ -94,22 +94,19 @@ function wembassy_kidneyx_rename($fields, $entry, $form_data, $entry_id) {
             $new_url = $url_base . '/' . $new_name;
             $new_urls[$field_id] = $new_url;
             
-            // Delete original
             if (file_exists($file_path)) unlink($file_path);
         }
     }
     
-    // Update entry if we have new URLs
+    // Update entry via database
     if (!empty($new_urls)) {
         global $wpdb;
         $table = $wpdb->prefix . 'wpforms_entries';
-        
-        // Get current fields
         $row = $wpdb->get_row($wpdb->prepare("SELECT fields FROM $table WHERE entry_id = %d", $entry_id));
+        
         if ($row && $row->fields) {
             $entry_fields = json_decode($row->fields, true);
             if ($entry_fields) {
-                // Update field values
                 foreach ($new_urls as $fid => $url) {
                     if (isset($entry_fields[$fid])) {
                         $entry_fields[$fid]['value'] = $url;
@@ -118,7 +115,6 @@ function wembassy_kidneyx_rename($fields, $entry, $form_data, $entry_id) {
                     }
                 }
                 
-                // Save back to database
                 $wpdb->update(
                     $table,
                     array('fields' => json_encode($entry_fields)),
