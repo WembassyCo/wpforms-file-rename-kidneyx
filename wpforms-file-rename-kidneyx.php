@@ -18,6 +18,8 @@ if (!defined('ABSPATH')) {
  * - TeamName: From form field (or timestamp if field not found)
  * - Abbrev: Abbreviation of form title
  * 
+ * Runs on all forms using wpforms_process_entry_save hook
+ * 
  * @param array $fields Form fields
  * @param array $entry Entry data
  * @param int   $form_id Form ID
