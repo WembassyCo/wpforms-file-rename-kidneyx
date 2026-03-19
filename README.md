@@ -1,18 +1,17 @@
 # WPForms File Rename - KidneyX
 
-WordPress plugin that renames uploaded files in WPForms using the `wpforms_process_entry_save` action hook.
+WordPress plugin that renames uploaded files in WPForms using WPForms 1.10+ compatible hooks.
 
 ## How It Works
 
 When a form is submitted, this plugin:
 
-1. **Captures form data** via `wpforms_process_entry_save` hook
-2. **Finds Team Name** from a field labeled "team" (or uses timestamp as fallback)
-3. **Generates abbreviation** from the form title (e.g., "Application Form" → "AF")
+1. **Captures team name early** via `wpforms_process_before` hook
+2. **Finds Team Name** from field ID 2 (or uses timestamp as fallback)
+3. **Generates abbreviation** from the form title (e.g., "Submission Portal" → "SP")
 4. **Renames files** to pattern: `[TeamName]_[Abbrev]_KidneyXEmpower_Submission.pdf`
-5. **Updates entry data** with the new file URL
+5. **Updates entry data** with the new file URLs
 6. **Deletes original files** after successful rename
-7. **Logs all actions** to WordPress error log
 
 ## Filename Formula
 
@@ -20,7 +19,7 @@ When a form is submitted, this plugin:
 [TeamName]_[Abbrev]_KidneyXEmpower_Submission.pdf
 ```
 
-- **TeamName**: Value from field with "team" in the label (or timestamp if not found)
+- **TeamName**: Value from field ID 2 (or timestamp if not found)
 - **Abbrev**: First letter of each word in form title (max 5 chars)
 - **Extension**: Preserved from original file
 
@@ -35,27 +34,26 @@ When a form is submitted, this plugin:
 ## Requirements
 
 - WordPress 5.0+
-- WPForms plugin
+- WPForms plugin 1.10.0+
 
 ## Installation
 
-1. Upload to `/wp-content/plugins/wpforms-file-rename-kidneyx/`
+1. Upload `wpforms-file-rename-kidneyx.php` to `/wp-content/plugins/`
 2. Activate in WordPress admin
-3. Submit a test form and check error logs
+3. Submit a test form with file upload
 
-## Debugging
+## Hooks Used
 
-All actions are logged to WordPress error log with prefix `WEMBASSY FILE RENAME:`
+- `wpforms_process_before` - Captures team name from form data
+- `wpforms_process_after` - Renames files after entry is fully saved
 
-View logs via:
-- WP Engine: `/wp-content/uploads/sites/*/wp-logs/`
-- Debug Bar plugin
-- Or add to `wp-config.php`: `define('WP_DEBUG_LOG', true);`
+## Troubleshooting
 
-## Hook Used
+If files aren't being renamed:
 
-- `wpforms_process_entry_save` - Fires after entry is saved, before notifications are sent
-- Documentation: https://wpforms.com/developers/wpforms_process_entry_save/
+1. Check that the form has a field with ID 2 (team name)
+2. Verify file upload field is properly configured
+3. Check WordPress error logs for messages
 
 ## Author
 
