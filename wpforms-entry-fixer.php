@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WPForms Entry URL Fixer
  * Description: Admin tool to update WPForms entry URLs after file rename
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Wembassy
  */
 
@@ -38,7 +38,7 @@ function wembassy_entry_fixer_page() {
         if ($entry_id && $new_url) {
             $result = wembassy_fix_entry_url($entry_id, $field_id, $new_url);
             if ($result) {
-                $message = '<div class="notice notice-success"><p>✅ Entry #' . $entry_id . ' updated successfully!</p></div>';
+                $message = '<div class="notice notice-success"><p>✅ Entry #' . $entry_id . ' updated successfully! New URL: ' . esc_html($new_url) . '</p></div>';
                 $updated = true;
             } else {
                 $message = '<div class="notice notice-error"><p>❌ Failed to update entry #' . $entry_id . '</p></div>';
@@ -51,12 +51,15 @@ function wembassy_entry_fixer_page() {
     $entries = $wpdb->get_results("SELECT entry_id, form_id, fields, date FROM $table ORDER BY entry_id DESC LIMIT 20");
     
     ?>
+    
     <div class="wrap">
         <h1>WPForms Entry URL Fixer</h1>
         
         <?php echo $message; ?>
         
-        <p>This tool helps fix entry URLs after files have been renamed. Look for entries where the file URL doesn't match the actual filename.</p>
+        <div class="notice notice-warning">
+            <p><strong>How this works:</strong> The entry shows the OLD URL, but the file has been renamed. This tool finds the renamed file and updates the entry to point to it.</p>
+        </div>
         
         <h2>Recent Entries with File Uploads</h2>
         
@@ -66,13 +69,16 @@ function wembassy_entry_fixer_page() {
                     <th>Entry ID</th>
                     <th>Form ID</th>
                     <th>Date</th>
-                    <th>File Field</th>
-                    <th>Current URL</th>
+                    <th>Field ID</th>
+                    <th>Current Entry URL</th>
+                    <th>File Status</th>
                     <th>Action</th>
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($entries as $entry): 
+                <?php 
+                $upload_dir = wp_upload_dir();
+                foreach ($entries as $entry): 
                     $fields = json_decode($entry->fields, true);
                     if (!is_array($fields)) continue;
                     
@@ -83,53 +89,70 @@ function wembassy_entry_fixer_page() {
                         $url = is_array($field['value']) ? $field['value'][0] : $field['value'];
                         $filename = basename($url);
                         
-                        // Check if file exists with current name
-                        $upload_dir = wp_upload_dir();
+                        // Check if file exists at stored URL
                         $file_path = str_replace($upload_dir['baseurl'], $upload_dir['basedir'], $url);
                         $exists = file_exists($file_path);
                         
-                        // Try to find renamed file
+                        // Look for renamed file (even if current exists, check for renamed version)
                         $renamed_url = '';
-                        if (!$exists && preg_match('/kidneyxempodev.*\.pdf$/i', $url)) {
-                            // Look for renamed files in same directory
-                            $dir = dirname($file_path);
-                            if (is_dir($dir)) {
-                                $files = glob($dir . '/*KidneyXEmpower_Submission*.pdf');
-                                if (!empty($files)) {
-                                    $renamed_url = str_replace($upload_dir['basedir'], $upload_dir['baseurl'], $files[0]);
+                        $renamed_exists = false;
+                        $dir = dirname($file_path);
+                        
+                        if (is_dir($dir)) {
+                            // Look for files matching the KidneyX pattern
+                            $pattern = $dir . '/*KidneyXEmpower_Submission*.pdf';
+                            $files = glob($pattern);
+                            
+                            if (!empty($files)) {
+                                foreach ($files as $file) {
+                                    $test_url = str_replace($upload_dir['basedir'], $upload_dir['baseurl'], $file);
+                                    // If this is different from current URL, it's the renamed one
+                                    if ($test_url !== $url) {
+                                        $renamed_url = $test_url;
+                                        $renamed_exists = true;
+                                        break;
+                                    }
                                 }
                             }
                         }
+                        
+                        // Show row if file doesn't exist OR if renamed file found
+                        $needs_fix = !$exists || ($renamed_exists && $renamed_url !== $url);
                 ?>
                 <tr>
                     <td><?php echo $entry->entry_id; ?></td>
                     <td><?php echo $entry->form_id; ?></td>
                     <td><?php echo $entry->date; ?></td>
-                    <td>Field <?php echo $fid; ?></td>
+                    <td><?php echo $fid; ?></td>
                     <td>
-                        <code style="font-size:11px;word-break:break-all;"><?php echo esc_html($url); ?></code><br>
+                        <code style="font-size:10px;word-break:break-all;display:block;max-width:300px;"><?php echo esc_html($url); ?></code>
+                    </td>
+                    <td>
                         <?php if ($exists): ?>
-                            <span style="color:green;">✅ File exists</span>
+                            <span style="color:green;">✅ File exists at URL</span>
                         <?php else: ?>
-                            <span style="color:red;">❌ File not found</span>
+                            <span style="color:red;">❌ File NOT found at URL</span>
+                        <?php endif; ?>
+                        <?php if ($renamed_exists && $renamed_url !== $url): ?>
+                            <br><span style="color:orange;">📝 Renamed file found:</span>
+                            <br><code style="font-size:10px;"><?php echo basename($renamed_url); ?></code>
                         <?php endif; ?>
                     </td>
                     <td>
-                        <?php if (!$exists && $renamed_url): ?>
+                        <?php if ($renamed_exists && $renamed_url !== $url): ?>
                             <form method="post" style="display:inline;">
                                 <?php wp_nonce_field('wembassy_fix_entry'); ?>
                                 <input type="hidden" name="entry_id" value="<?php echo $entry->entry_id; ?>">
                                 <input type="hidden" name="field_id" value="<?php echo $fid; ?>">
                                 <input type="hidden" name="new_url" value="<?php echo esc_attr($renamed_url); ?>">
                                 <button type="submit" name="fix_entry" class="button button-primary">
-                                    Fix URL
+                                    Update Entry URL
                                 </button>
                             </form>
-                            <br><small>New: <code><?php echo basename($renamed_url); ?></code></small>
-                        <?php elseif ($exists): ?>
-                            <span class="button disabled" style="opacity:0.5;">No fix needed</span>
+                        <?php elseif (!$exists && !$renamed_exists): ?>
+                            <span style="color:red;">No renamed file found</span>
                         <?php else: ?>
-                            <span style="color:orange;">Manual fix required</span>
+                            <span style="color:green;">No fix needed</span>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -137,39 +160,53 @@ function wembassy_entry_fixer_page() {
             </tbody>
         </table>
         
-        <h2 style="margin-top:30px;">Manual URL Fix</h2>
+        <h2 style="margin-top:30px;">Quick Fix: Form 88, Field 8</h2>
+        
+        <p>Since you mentioned Form ID 88 and Field ID 8, use this quick form:</p>
+        
         <form method="post">
             <?php wp_nonce_field('wembassy_fix_entry'); ?>
+            
             <table class="form-table">
                 <tr>
-                    <th><label for="manual_entry_id">Entry ID</label></th>
-                    <td><input type="number" name="entry_id" id="manual_entry_id" required></td>
+                    <th><label for="quick_entry_id">Entry ID</label></th>
+                    <td><input type="number" name="entry_id" id="quick_entry_id" required></td>
                 </tr>
                 <tr>
-                    <th><label for="manual_field_id">Field ID</label></th>
-                    <td><input type="text" name="field_id" id="manual_field_id" placeholder="e.g., 5" required></td>
+                    <th>Field ID</th>
+                    <td><input type="text" name="field_id" value="8" readonly> (locked to 8)</td>
                 </tr>
                 <tr>
-                    <th><label for="manual_new_url">New File URL</label></th>
-                    <td><input type="url" name="new_url" id="manual_new_url" style="width:100%;" placeholder="https://.../TeamName_ABBR_KidneyXEmpower_Submission.pdf" required></td>
+                    <th><label for="quick_new_url">New File URL</label></th>
+                    <td>
+                        <input type="url" name="new_url" id="quick_new_url" style="width:100%;" placeholder="https://kidneyxempodev.wpenginepowered.com/wp-content/uploads/2026/03/TeamName_ABBR_KidneyXEmpower_Submission.pdf" required>
+                        <p class="description">Paste the full URL of the renamed file here</p>
+                    </td>
                 </tr>
             </table>
             <?php submit_button('Update Entry URL', 'primary', 'fix_entry'); ?>
         </form>
         
-        <h2 style="margin-top:30px;">Bulk Scan for Renamed Files</h2>
-        <p>Click to scan upload directories and match renamed files to entries:</p>
+        <h2 style="margin-top:30px;">Bulk Fix All Entries</h2>
+        
+        <p>This will scan ALL entries and fix any that have renamed files:</p>
+        
         <form method="get">
             <input type="hidden" name="page" value="wpforms-entry-fixer">
-            <input type="hidden" name="bulk_scan" value="1">
-            <?php submit_button('Run Bulk Scan', 'secondary'); ?>
+            <input type="hidden" name="bulk_fix" value="1">
+            <?php submit_button('Run Bulk Fix', 'secondary'); ?>
         </form>
         
-        <?php if (isset($_GET['bulk_scan'])): 
-            $fixed = wembassy_bulk_fix_entries();
+        <?php if (isset($_GET['bulk_fix'])): 
+            $results = wembassy_bulk_fix_all_entries();
         ?>
             <div class="notice notice-info">
-                <p>Bulk scan complete. Fixed <?php echo $fixed; ?> entries.</p>
+                <p><strong>Bulk Fix Results:</strong></p>
+                <ul>
+                    <li>Entries checked: <?php echo $results['checked']; ?></li>
+                    <li>Entries fixed: <?php echo $results['fixed']; ?></li>
+                    <li>Errors: <?php echo $results['errors']; ?></li>
+                </ul>
             </div>
         <?php endif; ?>
     </div>
@@ -185,13 +222,23 @@ function wembassy_fix_entry_url($entry_id, $field_id, $new_url) {
     $row = $wpdb->get_row($wpdb->prepare("SELECT fields FROM $table WHERE entry_id = %d", $entry_id), ARRAY_A);
     
     if (!$row || empty($row['fields'])) {
+        error_log("Entry Fixer: Could not find entry $entry_id");
         return false;
     }
     
     $fields = json_decode($row['fields'], true);
-    if (!is_array($fields) || !isset($fields[$field_id])) {
+    if (!is_array($fields)) {
+        error_log("Entry Fixer: Could not decode fields for entry $entry_id");
         return false;
     }
+    
+    if (!isset($fields[$field_id])) {
+        error_log("Entry Fixer: Field $field_id not found in entry $entry_id");
+        return false;
+    }
+    
+    // Store old URL for logging
+    $old_url = is_array($fields[$field_id]['value']) ? $fields[$field_id]['value'][0] : $fields[$field_id]['value'];
     
     // Update the field
     $fields[$field_id]['value'] = $new_url;
@@ -201,24 +248,31 @@ function wembassy_fix_entry_url($entry_id, $field_id, $new_url) {
     // Update database
     $result = $wpdb->update(
         $table,
-        array('fields' => json_encode($fields)),
+        array('fields' => wp_json_encode($fields)),
         array('entry_id' => $entry_id),
         array('%s'),
         array('%d')
     );
     
-    return $result !== false;
+    if ($result === false) {
+        error_log("Entry Fixer: Database update failed for entry $entry_id: " . $wpdb->last_error);
+        return false;
+    }
+    
+    error_log("Entry Fixer: Successfully updated entry $entry_id, field $field_id from $old_url to $new_url");
+    return true;
 }
 
-// Bulk scan and fix
-function wembassy_bulk_fix_entries() {
+// Bulk fix all entries
+function wembassy_bulk_fix_all_entries() {
     global $wpdb;
     $table = $wpdb->prefix . 'wpforms_entries';
     $upload_dir = wp_upload_dir();
-    $fixed = 0;
     
-    // Get all entries with file uploads
-    $entries = $wpdb->get_results("SELECT entry_id, fields FROM $table");
+    $results = array('checked' => 0, 'fixed' => 0, 'errors' => 0);
+    
+    // Get all entries
+    $entries = $wpdb->get_results("SELECT entry_id, fields FROM $table ORDER BY entry_id DESC");
     
     foreach ($entries as $entry) {
         $fields = json_decode($entry->fields, true);
@@ -230,10 +284,13 @@ function wembassy_bulk_fix_entries() {
             if (!isset($field['type']) || $field['type'] !== 'file-upload') continue;
             if (empty($field['value'])) continue;
             
+            $results['checked']++;
+            
             $url = is_array($field['value']) ? $field['value'][0] : $field['value'];
             $file_path = str_replace($upload_dir['baseurl'], $upload_dir['basedir'], $url);
             
-            if (file_exists($file_path)) continue; // File exists, skip
+            // Skip if file exists
+            if (file_exists($file_path)) continue;
             
             // Look for renamed file
             $dir = dirname($file_path);
@@ -243,25 +300,35 @@ function wembassy_bulk_fix_entries() {
             $files = glob($pattern);
             
             if (!empty($files)) {
+                // Use the first matching file
                 $new_url = str_replace($upload_dir['basedir'], $upload_dir['baseurl'], $files[0]);
-                $fields[$fid]['value'] = $new_url;
-                $fields[$fid]['file'] = $new_url;
-                $fields[$fid]['file_original'] = basename($new_url);
-                $updated = true;
+                
+                // Only update if different
+                if ($new_url !== $url) {
+                    $fields[$fid]['value'] = $new_url;
+                    $fields[$fid]['file'] = $new_url;
+                    $fields[$fid]['file_original'] = basename($new_url);
+                    $updated = true;
+                }
             }
         }
         
         if ($updated) {
-            $wpdb->update(
+            $result = $wpdb->update(
                 $table,
-                array('fields' => json_encode($fields)),
+                array('fields' => wp_json_encode($fields)),
                 array('entry_id' => $entry->entry_id),
                 array('%s'),
                 array('%d')
             );
-            $fixed++;
+            
+            if ($result !== false) {
+                $results['fixed']++;
+            } else {
+                $results['errors']++;
+            }
         }
     }
     
-    return $fixed;
+    return $results;
 }
