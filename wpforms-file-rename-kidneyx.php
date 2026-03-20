@@ -163,9 +163,40 @@ function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
                 if ($row && $row->fields) {
                     $entry_fields = json_decode($row->fields, true);
                     if ($entry_fields && isset($entry_fields[$field_id])) {
+                        $new_filename = basename($new_url);
+                        
+                        // Update main value
                         $entry_fields[$field_id]['value'] = $new_url;
-                        $wpdb->update($table, array('fields' => json_encode($entry_fields)), array('entry_id' => $entry_id));
-                        $output[] = 'DB updated';
+                        
+                        // Update value_raw array if it exists (this is what admin displays)
+                        if (isset($entry_fields[$field_id]['value_raw']) && is_array($entry_fields[$field_id]['value_raw'])) {
+                            foreach ($entry_fields[$field_id]['value_raw'] as $idx => $file_data) {
+                                if (isset($file_data['value'])) {
+                                    $entry_fields[$field_id]['value_raw'][$idx]['value'] = $new_url;
+                                }
+                                if (isset($file_data['file'])) {
+                                    $entry_fields[$field_id]['value_raw'][$idx]['file'] = $new_filename;
+                                }
+                                if (isset($file_data['file_original'])) {
+                                    $entry_fields[$field_id]['value_raw'][$idx]['file_original'] = $new_filename;
+                                }
+                                if (isset($file_data['file_user_name'])) {
+                                    $entry_fields[$field_id]['value_raw'][$idx]['file_user_name'] = $new_filename;
+                                }
+                                if (isset($file_data['name'])) {
+                                    $entry_fields[$field_id]['value_raw'][$idx]['name'] = $new_filename;
+                                }
+                            }
+                        }
+                        
+                        // Update other field keys
+                        $entry_fields[$field_id]['file'] = $new_url;
+                        $entry_fields[$field_id]['file_original'] = $new_filename;
+                        $entry_fields[$field_id]['file_user_name'] = $new_filename;
+                        $entry_fields[$field_id]['name'] = $new_filename;
+                        
+                        $wpdb->update($table, array('fields' => wp_json_encode($entry_fields)), array('entry_id' => $entry_id));
+                        $output[] = 'DB updated (value + value_raw)';
                     }
                 }
             }
