@@ -215,17 +215,10 @@ function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
     set_transient('wembassy_minimal_' . get_current_user_id(), $output, 60);
 }
 
-// Show on confirmation
-add_filter('wpforms_frontend_confirmation_message', 'wembassy_minimal_show', 10, 4);
+// Debug output disabled - remove this filter to enable debugging
+// add_filter('wpforms_frontend_confirmation_message', 'wembassy_minimal_show', 10, 4);
 
 function wembassy_minimal_show($message, $form_data, $fields, $entry_id) {
-    $data = get_transient('wembassy_minimal_' . get_current_user_id());
-    if ($data) {
-        $html = '<div style="background:#f0f0f0;border:2px solid #0073aa;padding:10px;margin:10px 0;font-family:monospace;font-size:11px;white-space:pre-wrap;">';
-        $html .= implode('\n', $data);
-        $html .= '</div>';
-        delete_transient('wembassy_minimal_' . get_current_user_id());
-        return $message . $html;
-    }
+    // Disabled - no debug output on form submission
     return $message;
 }
