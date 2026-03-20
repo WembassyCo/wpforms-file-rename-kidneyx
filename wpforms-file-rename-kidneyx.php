@@ -26,18 +26,30 @@ function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
     }
     $output[] = 'Team: ' . $team;
     
-    // Get abbrev from field 1
+    // Get abbrev from field 1 - first letter of each word, max 5 chars
     $abbrev = 'FORM';
     if (isset($fields['1']) && isset($fields['1']['value'])) {
         $val = $fields['1']['value'];
         if (is_string($val) && !empty($val)) {
-            $abbrev = sanitize_file_name($val);
+            // Clean and split by spaces
+            $clean = preg_replace('/[^a-zA-Z0-9\s]/', '', $val);
+            $words = explode(' ', $clean);
+            $letters = '';
+            foreach ($words as $word) {
+                $word = trim($word);
+                if (!empty($word)) {
+                    $letters .= strtoupper(substr($word, 0, 1));
+                }
+            }
+            $abbrev = substr($letters, 0, 5);
+            if (empty($abbrev)) {
+                $abbrev = 'FORM';
+            }
         }
     }
     $output[] = 'Abbrev: ' . $abbrev;
     
     $team = sanitize_file_name($team);
-    $abbrev = sanitize_file_name($abbrev);
     
     // Get upload dir
     $upload_dir = wp_upload_dir();
