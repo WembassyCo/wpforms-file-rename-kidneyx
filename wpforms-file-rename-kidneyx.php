@@ -50,6 +50,7 @@ function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
     $output[] = 'Abbrev: ' . $abbrev;
     
     $team = sanitize_file_name($team);
+    // Note: $abbrev is already clean (just letters), no need to sanitize
     
     // Get upload dir
     $upload_dir = wp_upload_dir();
