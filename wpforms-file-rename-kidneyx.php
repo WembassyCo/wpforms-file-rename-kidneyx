@@ -26,20 +26,13 @@ function wembassy_minimal_complete($fields, $entry, $form_data, $entry_id) {
     }
     $output[] = 'Team: ' . $team;
     
-    // Get abbrev
-    $form_title = isset($form_data['settings']['form_title']) ? $form_data['settings']['form_title'] : 'Form';
-    $title = preg_replace('/[^a-zA-Z0-9\s]/', '', $form_title);
-    $words = explode(' ', $title);
-    $abbrev = '';
-    foreach ($words as $w) {
-        $w = trim($w);
-        if (!empty($w)) {
-            $abbrev .= strtoupper(substr($w, 0, 1));
+    // Get abbrev from field 1
+    $abbrev = 'FORM';
+    if (isset($fields['1']) && isset($fields['1']['value'])) {
+        $val = $fields['1']['value'];
+        if (is_string($val) && !empty($val)) {
+            $abbrev = sanitize_file_name($val);
         }
-    }
-    $abbrev = substr($abbrev, 0, 5);
-    if (empty($abbrev)) {
-        $abbrev = 'FORM';
     }
     $output[] = 'Abbrev: ' . $abbrev;
     
