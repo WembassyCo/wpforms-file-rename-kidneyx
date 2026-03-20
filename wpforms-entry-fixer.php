@@ -251,18 +251,38 @@ function wembassy_manual_update_entry($entry_id, $field_id, $new_url) {
     
     // Store old for logging
     $old_val = $fields[$field_id]['value'];
+    $new_filename = basename($new_url);
     error_log("Entry Fixer: Old value: " . print_r($old_val, true));
     
-    // Update field
+    // Update main value
     $fields[$field_id]['value'] = $new_url;
-    $fields[$field_id]['file'] = $new_url;
-    $fields[$field_id]['file_original'] = basename($new_url);
-    $fields[$field_id]['file_user_name'] = basename($new_url);
     
-    // Handle raw_value if present
-    if (isset($fields[$field_id]['raw_value'])) {
-        $fields[$field_id]['raw_value'] = $new_url;
+    // Update value_raw array if it exists (this is what admin displays)
+    if (isset($fields[$field_id]['value_raw']) && is_array($fields[$field_id]['value_raw'])) {
+        foreach ($fields[$field_id]['value_raw'] as $idx => $file_data) {
+            if (isset($file_data['value'])) {
+                $fields[$field_id]['value_raw'][$idx]['value'] = $new_url;
+            }
+            if (isset($file_data['file'])) {
+                $fields[$field_id]['value_raw'][$idx]['file'] = $new_filename;
+            }
+            if (isset($file_data['file_original'])) {
+                $fields[$field_id]['value_raw'][$idx]['file_original'] = $new_filename;
+            }
+            if (isset($file_data['file_user_name'])) {
+                $fields[$field_id]['value_raw'][$idx]['file_user_name'] = $new_filename;
+            }
+            if (isset($file_data['name'])) {
+                $fields[$field_id]['value_raw'][$idx]['name'] = $new_filename;
+            }
+        }
     }
+    
+    // Update other field keys
+    $fields[$field_id]['file'] = $new_url;
+    $fields[$field_id]['file_original'] = $new_filename;
+    $fields[$field_id]['file_user_name'] = $new_filename;
+    $fields[$field_id]['name'] = $new_filename;
     
     // Encode
     $new_json = wp_json_encode($fields);
